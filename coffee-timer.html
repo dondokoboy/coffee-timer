@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コーヒータイマー</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #6B4423 0%, #3E2723 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #fff;
+            padding: 1rem;
+            touch-action: manipulation;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 2rem 1.5rem;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: #FFE4C4;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #D2B48C;
+            margin-bottom: 1.5rem;
+            line-height: 1.4;
+        }
+
+        .timer-display {
+            font-size: 4rem;
+            font-weight: bold;
+            margin: 1.5rem 0;
+            font-family: 'Courier New', monospace;
+            color: #FFD700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
+        @media (min-width: 375px) {
+            .timer-display {
+                font-size: 5rem;
+            }
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 1rem 1.5rem;
+            font-size: 1rem;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            min-width: 90px;
+            min-height: 48px; /* タッチしやすい最小サイズ */
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .start-btn {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+        }
+
+        .stop-btn {
+            background: linear-gradient(135deg, #f44336 0%, #da190b 100%);
+            color: white;
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status {
+            margin-top: 1.5rem;
+            font-size: 1rem;
+            color: #FFE4C4;
+            min-height: 1.5rem;
+        }
+
+        .beep-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin-left: 0.5rem;
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.5);
+                opacity: 0.5;
+            }
+        }
+
+        .coffee-icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="coffee-icon">☕</div>
+        <h1>コーヒータイマー</h1>
+        <p class="subtitle">30秒 / 1分 / 2分 / 2分10秒 / 2分20秒 / 2分30秒で通知</p>
+        
+        <div class="timer-display" id="timerDisplay">00:00</div>
+        
+        <div class="controls">
+            <button class="start-btn" id="startBtn" onclick="startTimer()">開始</button>
+            <button class="stop-btn" id="stopBtn" onclick="stopTimer()" disabled>停止</button>
+            <button class="reset-btn" id="resetBtn" onclick="resetTimer()">リセット</button>
+        </div>
+        
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        let seconds = 0;
+        let timerInterval = null;
+        let beepedTimes = new Set(); // 既にビープした時間を記録
+        let audioContext = null;
+
+        // ビープ音を鳴らすタイミング（秒）
+        const beepTimings = [30, 60, 120, 130, 140, 150];
+
+        // Web Audio APIを使用してビープ音を生成
+        function playBeep(currentSeconds) {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800; // 800Hzのビープ音
+            oscillator.type = 'sine';
+
+            // 音量を上げる（0.3 → 0.6）
+            gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+
+            // ビープ表示
+            const status = document.getElementById('status');
+            const mins = Math.floor(currentSeconds / 60);
+            const secs = currentSeconds % 60;
+            const timeText = mins > 0 ? `${mins}分${secs > 0 ? secs + '秒' : ''}` : `${secs}秒`;
+            status.innerHTML = `${timeText}経過！<span class="beep-indicator"></span>`;
+            setTimeout(() => {
+                status.innerHTML = '';
+            }, 2000);
+        }
+
+        function updateDisplay() {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            document.getElementById('timerDisplay').textContent = 
+                `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer() {
+            if (timerInterval) return;
+
+            // 初回クリック時にAudioContextを初期化（ブラウザのポリシー対応）
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+
+            timerInterval = setInterval(() => {
+                seconds++;
+                updateDisplay();
+
+                // 指定された時間でビープ音を鳴らす
+                if (beepTimings.includes(seconds) && !beepedTimes.has(seconds)) {
+                    playBeep(seconds);
+                    beepedTimes.add(seconds);
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+            }
+        }
+
+        function resetTimer() {
+            stopTimer();
+            seconds = 0;
+            beepedTimes.clear();
+            updateDisplay();
+            document.getElementById('status').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
